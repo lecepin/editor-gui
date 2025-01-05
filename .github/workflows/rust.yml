@@ -1,0 +1,59 @@
+name: Build
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies (windows only)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - name: Install frontend dependencies
+        run: pnpm i
+
+      - name: Build
+        run: pnpm tauri build
+
+      - name: Upload Artifacts
+        shell: bash
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -la
+          if [ "${{ matrix.platform }}" == "windows-latest" ]; then
+            pwsh ./up.ps1
+          else
+            chmod +x ./up.sh
+            ./up.sh
+          fi
