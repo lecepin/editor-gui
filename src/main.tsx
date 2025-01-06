@@ -1,11 +1,29 @@
 import ReactDOM from "react-dom/client";
 import App from "./App.tsx";
+import { open } from "@tauri-apps/plugin-shell";
 
 import "bytemd/dist/index.css";
 
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
+
+document.addEventListener("click", async (e) => {
+  const target = e.target as HTMLElement;
+  const link = target.closest("a");
+
+  if (link) {
+    const href = link.getAttribute("href");
+    if (href?.startsWith("http")) {
+      e.preventDefault();
+      try {
+        await open(href);
+      } catch (err) {
+        console.error("Failed to open URL:", err);
+      }
+    }
+  }
+});
 
 document.addEventListener(
   "contextmenu",
