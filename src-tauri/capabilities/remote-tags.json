@@ -1,9 +1,0 @@
-{
-  "$schema": "../gen/schemas/remote-schema.json",
-  "identifier": "remote-tag-capability",
-  "windows": ["*"],
-  "remote": {
-    "urls": ["http://localhost:61234"]
-  },
-  "permissions": ["shell:default"]
-}

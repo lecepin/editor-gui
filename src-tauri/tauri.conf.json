@@ -18,7 +18,18 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "default",
+          "description": "Capability for the main window",
+          "windows": ["*"],
+          "remote": {
+            "urls": ["http://localhost:61234"]
+          },
+          "permissions": ["core:default", "opener:default", "shell:default"]
+        }
+      ]
     }
   },
   "bundle": {
