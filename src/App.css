@@ -1,3 +1,8 @@
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
 /* 基础布局 */
 .editor-container {
   display: flex;
@@ -24,16 +29,65 @@
 
 /* 右侧编辑器 */
 .editor-content {
-  width: calc(100vw - 250px);
+  flex: 1;
+  min-width: 0;
   position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-content .bytemd {
+  flex: 1;
+  min-height: 0;
+}
+
+.input-title-wrapper {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #f0f0f0;
+  padding-right: 8px;
 }
 
 .input-title {
+  flex: 1;
   padding: 16px;
   font-size: 24px;
   border: none;
-  border-bottom: 1px solid #f0f0f0;
   outline: none;
+  background: transparent;
+}
+
+.gen-title-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #bfbfbf;
+  font-size: 16px;
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s;
+}
+
+.gen-title-btn:hover {
+  color: #722ed1;
+  background: #f9f0ff;
+}
+
+.gen-title-btn.loading {
+  color: #722ed1;
+  cursor: not-allowed;
+  background: #f9f0ff;
+  animation: blink 0.9s ease-in-out infinite;
+}
+
+.gen-title-btn:disabled {
+  cursor: not-allowed;
 }
 
 /* 列表项样式 */

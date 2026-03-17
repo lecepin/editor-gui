@@ -1,20 +1,36 @@
 import { useEffect, useState } from "react";
-import { Button, List, Typography, Popconfirm } from "antd";
+import { Button, List, Typography, Popconfirm, Modal, Form, Input, message } from "antd";
 import {
   PlusOutlined,
   FileTextOutlined,
   DeleteOutlined,
   GithubOutlined,
+  SettingOutlined,
 } from "@ant-design/icons";
 import type { Document } from "../utils/db";
 import db from "../utils/db";
 import { open } from "@tauri-apps/plugin-shell";
+import { MODEL_CONFIG_KEYS } from "../utils/constants";
 
 interface DocumentListProps {
   currentDocId: number | null;
   onSelectDocument: (doc: Document) => void;
   onCreateDocument: () => void;
   lastUpdate?: number;
+}
+
+export interface ModelConfig {
+  baseUrl: string;
+  apiKey: string;
+  modelName: string;
+}
+
+export function loadModelConfig(): ModelConfig {
+  return {
+    baseUrl: localStorage.getItem(MODEL_CONFIG_KEYS.BASE_URL) || "",
+    apiKey: localStorage.getItem(MODEL_CONFIG_KEYS.API_KEY) || "",
+    modelName: localStorage.getItem(MODEL_CONFIG_KEYS.MODEL_NAME) || "",
+  };
 }
 
 export function DocumentList({
@@ -24,6 +40,8 @@ export function DocumentList({
   lastUpdate,
 }: DocumentListProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [settingOpen, setSettingOpen] = useState(false);
+  const [form] = Form.useForm<ModelConfig>();
 
   const loadDocuments = async () => {
     const docs = await db.getAllDocuments();
@@ -49,10 +67,26 @@ export function DocumentList({
           onSelectDocument(remainingDocs[0]);
         } else {
           // 如果没有文档了，清空当前选中状态
-          onSelectDocument({ id: null, title: "", content: "", updatedAt: 0 });
+          onSelectDocument({ id: null, title: "", content: "", createdAt: 0, updatedAt: 0 });
         }
       }
     }
+  };
+
+  const handleOpenSetting = () => {
+    const config = loadModelConfig();
+    form.setFieldsValue(config);
+    setSettingOpen(true);
+  };
+
+  const handleSaveSetting = () => {
+    form.validateFields().then((values) => {
+      localStorage.setItem(MODEL_CONFIG_KEYS.BASE_URL, values.baseUrl || "");
+      localStorage.setItem(MODEL_CONFIG_KEYS.API_KEY, values.apiKey || "");
+      localStorage.setItem(MODEL_CONFIG_KEYS.MODEL_NAME, values.modelName || "");
+      setSettingOpen(false);
+      message.success("模型配置已保存");
+    });
   };
 
   return (
@@ -69,6 +103,11 @@ export function DocumentList({
         <Button
           icon={<GithubOutlined />}
           onClick={() => open("https://github.com/lecepin")}
+        />
+        <Button
+          icon={<SettingOutlined />}
+          onClick={handleOpenSetting}
+          title="模型设置"
         />
       </div>
       <List
@@ -113,6 +152,44 @@ export function DocumentList({
           </List.Item>
         )}
       />
+
+      <Modal
+        title="模型设置"
+        open={settingOpen}
+        onOk={handleSaveSetting}
+        onCancel={() => setSettingOpen(false)}
+        okText="保存"
+        cancelText="取消"
+        width={480}
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          style={{ marginTop: 16 }}
+        >
+          <Form.Item
+            label="Base URL"
+            name="baseUrl"
+            rules={[{ required: true, message: "请输入 Base URL" }]}
+          >
+            <Input placeholder="https://api.openai.com/v1" autoComplete="off" />
+          </Form.Item>
+          <Form.Item
+            label="API Key"
+            name="apiKey"
+            rules={[{ required: true, message: "请输入 API Key" }]}
+          >
+            <Input.Password placeholder="sk-..." autoComplete="off" />
+          </Form.Item>
+          <Form.Item
+            label="模型名称"
+            name="modelName"
+            rules={[{ required: true, message: "请输入模型名称" }]}
+          >
+            <Input placeholder="gpt-4o-mini" autoComplete="off" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

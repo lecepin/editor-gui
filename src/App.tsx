@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import breask from "@bytemd/plugin-breaks";
 import frontmatter from "@bytemd/plugin-frontmatter";
 import gemoji from "@bytemd/plugin-gemoji";
@@ -20,9 +20,10 @@ import db from "./utils/db";
 import type { Document } from "./utils/db";
 import "antd/dist/reset.css";
 import "./App.css";
-import { FileTextOutlined } from "@ant-design/icons";
-import { Typography } from "antd";
+import { FileTextOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { Typography, Tooltip, message } from "antd";
 import { ImageManager } from "./components/ImageManager";
+import { loadModelConfig } from "./components/DocumentList";
 
 function addSpaceBetweenChineseAndEnglish(text: string) {
   return text
@@ -78,6 +79,8 @@ export default () => {
   const [currentDoc, setCurrentDoc] = useState<Document | null>(null);
   const [dbInitialized, setDbInitialized] = useState(false);
   const [imageManagerOpen, setImageManagerOpen] = useState(false);
+  const [generatingTitle, setGeneratingTitle] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setDbInitialized(true);
@@ -106,10 +109,12 @@ export default () => {
   };
 
   const createDocument = async () => {
+    const now = Date.now();
     const id = await db.addDocument({
       title: "无标题文档",
       content: "",
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     });
     const doc = await db.getDocument(id);
     if (doc) {
@@ -127,6 +132,7 @@ export default () => {
         id: currentDocId,
         title,
         content: value,
+        createdAt: currentDoc?.createdAt ?? Date.now(),
         updatedAt: Date.now(),
       });
       setLastUpdate(Date.now());
@@ -135,6 +141,78 @@ export default () => {
 
   const handleEditorChange = (newValue: string) => {
     setValue(newValue);
+  };
+
+  const generateTitle = async () => {
+    const config = loadModelConfig();
+    if (!config.baseUrl || !config.apiKey || !config.modelName) {
+      message.warning("请先在设置中配置模型参数（Base URL、API Key、模型名称）");
+      return;
+    }
+    if (!value.trim()) {
+      message.warning("文档内容为空，无法生成标题");
+      return;
+    }
+
+    setGeneratingTitle(true);
+    abortControllerRef.current = new AbortController();
+
+    try {
+      const res = await fetch(
+        `${config.baseUrl.replace(/\/$/, "")}/chat/completions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "api-key": config.apiKey,
+            Authorization: `Bearer ${config.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: config.modelName,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "你是一个专业的文档标题生成助手。你的任务是根据用户提供的 Markdown 文档内容，生成一个简洁、准确、有吸引力的标题。要求：标题不超过 20 个字，能准确概括文档核心内容，只返回标题本身，不要包含任何解释、引号或额外标点。",
+              },
+              {
+                role: "user",
+                content: `请为以下文档内容生成一个标题：\n\n${value.slice(0, 3000)}`,
+              },
+            ],
+            stream: false,
+            temperature: 0.7,
+          }),
+          signal: abortControllerRef.current.signal,
+        }
+      );
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`请求失败：${res.status} ${errText}`);
+      }
+
+      const data = await res.json();
+      const msg = data?.choices?.[0]?.message;
+      const generated = (msg?.content || msg?.reasoning_content || "")
+        .trim()
+        // 推理模型可能把标题混在思考过程末尾，取最后一行非空内容作为标题
+        .split("\n")
+        .filter(Boolean)
+        .pop() || "";
+      if (generated) {
+        setTitle(generated);
+        message.success("标题已生成");
+      } else {
+        message.error("模型未返回有效标题");
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      message.error(`生成失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setGeneratingTitle(false);
+      abortControllerRef.current = null;
+    }
   };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -230,6 +308,32 @@ export default () => {
     {
       actions: [
         {
+          title: "插入时间",
+          icon: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+          handler: {
+            type: "action",
+            click() {
+              const fmt = (ts: number) => {
+                const d = new Date(ts);
+                const weeks = ["日", "一", "二", "三", "四", "五", "六"];
+                const pad = (n: number) => String(n).padStart(2, "0");
+                return (
+                  `${d.getFullYear()}年${pad(d.getMonth() + 1)}月${pad(d.getDate())}日` +
+                  ` ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
+                  ` 星期${weeks[d.getDay()]}`
+                );
+              };
+              const createdAt = currentDoc?.createdAt ?? Date.now();
+              const block = `> 创建时间：${fmt(createdAt)}\n> 更新时间：${fmt(Date.now())}\n\n`;
+              setValue((prev) => block + prev);
+            },
+          },
+        },
+      ],
+    },
+    {
+      actions: [
+        {
           title: "本地图库",
           icon: `<svg t="1736081393132" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="2481" width="256" height="256"><path d="M878.2848 349.7472m0 115.0464l0 319.8464q0 115.0464-115.0464 115.0464l-305.1008 0q-115.0464 0-115.0464-115.0464l0-319.8464q0-115.0464 115.0464-115.0464l305.1008 0q115.0464 0 115.0464 115.0464Z" fill="#CFF6FF" p-id="2482"></path><path d="M531.1488 923.2896H243.1488a141.7728 141.7728 0 0 1-141.6192-141.6192V242.8416a141.7728 141.7728 0 0 1 141.6192-141.6192h513.4336a141.7728 141.7728 0 0 1 141.568 141.6192v241.7664a25.6 25.6 0 0 1-51.2 0V242.8416a90.5216 90.5216 0 0 0-90.368-90.4192H243.1488a90.5216 90.5216 0 0 0-90.4192 90.4192v538.8288a90.5216 90.5216 0 0 0 90.4192 90.4192h288a25.6 25.6 0 0 1 0 51.2z" fill="#474747" p-id="2483"></path><path d="M213.7088 629.2992a25.6 25.6 0 0 1-18.0224-7.424 25.6 25.6 0 0 1 0-36.1984l102.4-103.2704a48.7424 48.7424 0 0 1 67.4304-1.8432l102.4 92.672L670.72 385.6384a48.5888 48.5888 0 0 1 65.8944 0L811.52 453.12a25.6 25.6 0 0 1-34.4064 37.9392L704.0512 424.96l-203.3664 187.392a48.5376 48.5376 0 0 1-65.8432 0.3072L332.8 520.0896l-100.9152 101.632a25.6 25.6 0 0 1-18.176 7.5776zM324.2496 418.4576a94.1056 94.1056 0 1 1 94.1056-94.1056 94.1568 94.1568 0 0 1-94.1056 94.1056z m0-137.0112a42.9056 42.9056 0 1 0 42.9056 42.9056A42.9568 42.9568 0 0 0 324.2496 281.6z" fill="#474747" p-id="2484"></path><path d="M810.1888 917.6576h-107.1616A84.992 84.992 0 0 1 629.76 875.52l-53.6064-92.8256a85.1456 85.1456 0 0 1 0-84.736L629.76 604.928a84.992 84.992 0 0 1 73.3696-42.3424h107.1616a85.0432 85.0432 0 0 1 73.4208 42.3424l53.248 92.8256a84.8896 84.8896 0 0 1 0 84.736L883.6096 875.52a85.0432 85.0432 0 0 1-73.4208 42.1376z m-107.1616-303.872a33.5872 33.5872 0 0 0-29.0304 16.7424l-53.6064 92.8256a33.792 33.792 0 0 0 0 33.536L673.9968 849.92a33.6384 33.6384 0 0 0 29.0304 16.7424h107.1616a33.6896 33.6896 0 0 0 29.0816-16.7424l53.5552-92.8256a33.536 33.536 0 0 0 0-33.536l-53.5552-92.8256a33.6384 33.6384 0 0 0-29.0816-16.7424z" fill="#1285EF" p-id="2485"></path><path d="M760.8832 810.8032A73.4208 73.4208 0 1 1 834.56 737.28a73.472 73.472 0 0 1-73.6768 73.5232z m0-95.5904A22.2208 22.2208 0 1 0 783.36 737.28a22.1696 22.1696 0 0 0-22.4768-22.0672z" fill="#1285EF" p-id="2486"></path></svg>`,
           handler: {
@@ -257,14 +361,26 @@ export default () => {
 
     return (
       <>
-        <input
-          className="input-title"
-          type="text"
-          placeholder="标题…"
-          value={title}
-          onChange={handleTitleChange}
-          autoComplete="off"
-        />
+        <div className="input-title-wrapper">
+          <input
+            className="input-title"
+            type="text"
+            placeholder="标题…"
+            value={title}
+            onChange={handleTitleChange}
+            autoComplete="off"
+          />
+          <Tooltip title="AI 生成标题">
+            <button
+              className={`gen-title-btn${generatingTitle ? " loading" : ""}`}
+              onClick={generateTitle}
+              disabled={generatingTitle}
+              type="button"
+            >
+              <ThunderboltOutlined />
+            </button>
+          </Tooltip>
+        </div>
         <Editor
           value={value}
           plugins={plugins}

@@ -11,7 +11,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
 document.addEventListener("click", async (e) => {
   const target = e.target as HTMLElement;
   const link = target.closest("a");
-
   if (link) {
     const href = link.getAttribute("href");
     if (href?.startsWith("http")) {
@@ -25,22 +24,7 @@ document.addEventListener("click", async (e) => {
   }
 });
 
-document.addEventListener(
-  "contextmenu",
-  (e) => {
-    const target = e.target as HTMLElement;
-
-    const allowContextMenu = ["img"];
-
-    if (allowContextMenu.includes(target.tagName.toLowerCase())) {
-      return true;
-    }
-
-    e.preventDefault();
-    return false;
-  },
-  false
-);
+document.addEventListener("contextmenu", (e) => e.preventDefault(), false);
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {

@@ -6,6 +6,7 @@ export interface Document {
   id?: number | null;
   title: string;
   content: string;
+  createdAt: number;
   updatedAt: number;
 }
 
@@ -38,7 +39,20 @@ export class AppDatabase extends Dexie {
   }
 
   async getAllDocuments(): Promise<Document[]> {
-    return await this.documents.toArray();
+    const docs = await this.documents.toArray();
+    // 应用层迁移：旧文档没有 createdAt，用 updatedAt 补填并持久化
+    const needsMigration = docs.filter((d) => !d.createdAt);
+    if (needsMigration.length > 0) {
+      await Promise.all(
+        needsMigration.map((d) =>
+          this.documents.update(d.id as number, {
+            createdAt: d.updatedAt ?? Date.now(),
+          })
+        )
+      );
+      return this.documents.toArray();
+    }
+    return docs;
   }
 
   async getDocument(id: number): Promise<Document | undefined> {
