@@ -24,7 +24,15 @@ document.addEventListener("click", async (e) => {
   }
 });
 
-document.addEventListener("contextmenu", (e) => e.preventDefault(), false);
+document.addEventListener(
+  "contextmenu",
+  (e) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName.toLowerCase() === "img") return;
+    e.preventDefault();
+  },
+  false
+);
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
